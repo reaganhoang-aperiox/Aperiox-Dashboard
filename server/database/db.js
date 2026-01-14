@@ -1,12 +1,19 @@
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 import bcrypt from "bcryptjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DB_PATH = path.join(__dirname, "../data/trading.db");
+const DB_DIR = path.dirname(DB_PATH);
+
+// Ensure database directory exists
+if (!fs.existsSync(DB_DIR)) {
+  fs.mkdirSync(DB_DIR, { recursive: true });
+}
 
 // Create database instance
 export const db = new Database(DB_PATH);
@@ -84,7 +91,7 @@ const userModel = {
         name || username,
         accountId,
         isFirstUser ? 1 : 0, // First user becomes admin
-        isFirstUser ? 1 : 0  // First user is auto-approved
+        isFirstUser ? 1 : 0 // First user is auto-approved
       );
 
     return userModel.findById(result.lastInsertRowid);
@@ -106,9 +113,9 @@ const userModel = {
     fields.push("updatedAt = CURRENT_TIMESTAMP");
     values.push(id);
 
-    db.prepare(
-      `UPDATE users SET ${fields.join(", ")} WHERE id = ?`
-    ).run(...values);
+    db.prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = ?`).run(
+      ...values
+    );
 
     return userModel.findById(id);
   },
@@ -123,13 +130,17 @@ const userModel = {
 
   getAllPending: () => {
     return db
-      .prepare("SELECT * FROM users WHERE isApproved = 0 ORDER BY createdAt DESC")
+      .prepare(
+        "SELECT * FROM users WHERE isApproved = 0 ORDER BY createdAt DESC"
+      )
       .all();
   },
 
   getAll: () => {
     return db
-      .prepare("SELECT id, username, email, name, accountId, isAdmin, isApproved, createdAt FROM users ORDER BY createdAt DESC")
+      .prepare(
+        "SELECT id, username, email, name, accountId, isAdmin, isApproved, createdAt FROM users ORDER BY createdAt DESC"
+      )
       .all();
   },
 
@@ -140,4 +151,3 @@ const userModel = {
 };
 
 export { userModel };
-
