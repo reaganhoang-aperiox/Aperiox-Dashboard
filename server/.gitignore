@@ -1,0 +1,10 @@
+AGENT
+node_modules
+.env
+.env.local
+*.log
+dist
+build
+data/
+*.db
+*.db-journal
