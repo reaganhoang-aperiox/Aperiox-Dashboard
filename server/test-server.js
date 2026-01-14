@@ -33,6 +33,8 @@ app.post("/test/login", (req, res) => {
   });
 });
 
+// Testing
+
 app.listen(PORT, () => {
   console.log(`\n🧪 Test server running on http://localhost:${PORT}`);
   console.log(`\n📝 Try: curl http://localhost:${PORT}/test`);
