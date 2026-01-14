@@ -53,7 +53,7 @@ A modern, real-time trading dashboard for MT4 accounts with MetaAPI integration.
    ```
 
 4. **Access Dashboard**
-   - Open http://localhost:5173
+   - Open http://localhost:5173 / https://aperiox-dashboard.vercel.app
    - Login with demo credentials (see below)
 
 ### Demo Credentials
