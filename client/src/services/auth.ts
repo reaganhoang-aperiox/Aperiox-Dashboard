@@ -33,18 +33,18 @@ class AuthService {
         body: JSON.stringify(credentials),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Login failed");
-      }
+      const data = await response.json();
 
-      const data: AuthResponse = await response.json();
+      if (!response.ok) {
+        // Server returns error in 'error' property
+        throw new Error(data.error || data.message || "Login failed");
+      }
 
       // Store token and user info
       this.setToken(data.token);
       this.setUser(data.user);
 
-      return data;
+      return data as AuthResponse;
     } catch (error) {
       console.error("Login error:", error);
       throw error;

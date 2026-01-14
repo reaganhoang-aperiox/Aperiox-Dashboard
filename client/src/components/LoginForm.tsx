@@ -31,7 +31,9 @@ export const LoginForm = ({ onLoginSuccess, onShowSignup }: LoginFormProps) => {
       await authService.login(credentials);
       onLoginSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const errorMessage =
+        err instanceof Error ? err.message : "An error occurred during login";
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -102,7 +104,8 @@ export const LoginForm = ({ onLoginSuccess, onShowSignup }: LoginFormProps) => {
             </Button>
 
             <div className="text-center text-sm text-brand-gray pt-4 border-t border-border">
-              <p>Don't have an account?{" "}
+              <p>
+                Don't have an account?{" "}
                 <button
                   type="button"
                   onClick={() => onShowSignup?.()}
