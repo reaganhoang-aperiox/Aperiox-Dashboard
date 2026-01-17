@@ -23,7 +23,7 @@ const LivePositions = () => {
         setPositions(Array.isArray(data) ? data : []);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to fetch positions"
+          err instanceof Error ? err.message : "Failed to fetch positions",
         );
         console.error("Error fetching positions:", err);
       } finally {
@@ -41,8 +41,8 @@ const LivePositions = () => {
 
   const formatCurrency = (value: number) => {
     return `$${Math.abs(value).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     })}`;
   };
 
@@ -135,7 +135,7 @@ const LivePositions = () => {
                     }`}
                   >
                     {formatCurrency(
-                      positions.reduce((sum, p) => sum + (p.profit || 0), 0)
+                      positions.reduce((sum, p) => sum + (p.profit || 0), 0),
                     )}
                   </div>
                 </CardContent>
@@ -165,7 +165,10 @@ const LivePositions = () => {
                 <CardContent>
                   <div className="text-3xl font-bold">
                     {formatCurrency(
-                      positions.reduce((sum, p) => sum + (p.commission || 0), 0)
+                      positions.reduce(
+                        (sum, p) => sum + (p.commission || 0),
+                        0,
+                      ),
                     )}
                   </div>
                 </CardContent>

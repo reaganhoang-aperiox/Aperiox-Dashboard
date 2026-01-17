@@ -15,7 +15,7 @@ import { calculateMetrics, calculateDrawdown } from "@/utils/calculateMetrics";
 const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedYear, setSelectedYear] = useState<number>(
-    new Date().getFullYear()
+    new Date().getFullYear(),
   );
   const totalPages = 1;
 
@@ -40,7 +40,7 @@ const Dashboard = () => {
       // Reverse calculate: current balance - sum of all balance changes = initial balance
       const totalBalanceChanges = balanceDeals.reduce(
         (sum, d) => sum + d.profit,
-        0
+        0,
       );
       initialBalance = data.balance - totalBalanceChanges;
 
@@ -65,7 +65,7 @@ const Dashboard = () => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const closedTrades = deals.filter(
-      (d) => d.entryType === "DEAL_ENTRY_OUT" && d.type !== "DEAL_TYPE_BALANCE"
+      (d) => d.entryType === "DEAL_ENTRY_OUT" && d.type !== "DEAL_TYPE_BALANCE",
     );
     const monthlyProfit = closedTrades
       .filter((d) => new Date(d.time) >= thirtyDaysAgo)
@@ -75,7 +75,10 @@ const Dashboard = () => {
   }, [data]);
 
   const formatCurrency = (value: number) => {
-    return `$${Math.round(value).toLocaleString("en-US")}`;
+    return `$${Math.abs(value).toLocaleString("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })}`;
   };
 
   if (loading) {

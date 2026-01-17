@@ -1,6 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -11,13 +16,15 @@ import {
 import { fetchDeals, type Deal } from "@/services/api";
 import { authService } from "@/services/auth";
 import {
-  TrendingUp,
-  TrendingDown,
-  Calendar,
-  Filter,
+  Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
+  Filter,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
+import { format } from "date-fns";
+import { useEffect, useMemo, useState } from "react";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -25,11 +32,18 @@ const TradingLog = () => {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedYear, setSelectedYear] = useState<number>(
-    new Date().getFullYear()
+  // Date picker for range filter
+  const [selectedDate, setSelectedDate] = useState<{ from?: Date; to?: Date }>(
+    {},
   );
+  // Local state for calendar visible months
+  const [startMonth, setStartMonth] = useState<Date | undefined>(undefined);
+  const [endMonth, setEndMonth] = useState<Date | undefined>(undefined);
   const [filterType, setFilterType] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [dateFrom] = useState<string>("");
+  const [dateTo] = useState<string>("");
+  const [search] = useState<string>("");
 
   useEffect(() => {
     if (!authService.isAuthenticated()) {
@@ -41,12 +55,26 @@ const TradingLog = () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchDeals(undefined, undefined, selectedYear);
-        // fetchDeals now returns an array directly
+        // If selectedDate is set, filter by range
+        let from: number | undefined = undefined;
+        let to: number | undefined = undefined;
+        if (
+          selectedDate?.from instanceof Date &&
+          !isNaN(selectedDate.from.getTime())
+        ) {
+          from = selectedDate.from.setHours(0, 0, 0, 0);
+        }
+        if (
+          selectedDate?.to instanceof Date &&
+          !isNaN(selectedDate.to.getTime())
+        ) {
+          to = selectedDate.to.setHours(23, 59, 59, 999);
+        }
+        const data = await fetchDeals(from, to);
         setDeals(Array.isArray(data) ? data : []);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to fetch trading log"
+          err instanceof Error ? err.message : "Failed to fetch trading log",
         );
         console.error("Error fetching deals:", err);
       } finally {
@@ -55,12 +83,12 @@ const TradingLog = () => {
     };
 
     loadDeals();
-  }, [selectedYear]);
+  }, [selectedDate]);
 
   const formatCurrency = (value: number) => {
     return `$${Math.abs(value).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     })}`;
   };
 
@@ -74,28 +102,141 @@ const TradingLog = () => {
     });
   };
 
-  // Filter deals based on type
+  // Filter deals based on type, date range, and search input
   const filteredDeals = useMemo(() => {
     return deals.filter((deal) => {
-      if (filterType === "all") return true;
+      // Date filter only applies to profit/loss
+      let dateMatch = true;
+      if (
+        (filterType === "profit" || filterType === "loss") &&
+        (dateFrom || dateTo)
+      ) {
+        const dealDate = new Date(deal.time);
+        if (dateFrom) {
+          const from = new Date(dateFrom);
+          from.setHours(0, 0, 0, 0);
+          if (dealDate < from) dateMatch = false;
+        }
+        if (dateTo) {
+          const to = new Date(dateTo);
+          to.setHours(23, 59, 59, 999);
+          if (dealDate > to) dateMatch = false;
+        }
+      }
+      if (!dateMatch) return false;
+      if (filterType === "all") {
+        // General search for all trades
+        if (search) {
+          const s = search.toLowerCase();
+          // Search in symbol, price, volume, profit, commission, swap, and formatted date
+          if (
+            !(
+              deal.symbol?.toLowerCase().includes(s) ||
+              (deal.price && deal.price.toString().includes(s)) ||
+              (deal.volume && deal.volume.toString().includes(s)) ||
+              (deal.profit && deal.profit.toString().includes(s)) ||
+              (deal.commission && deal.commission.toString().includes(s)) ||
+              (deal.swap && deal.swap.toString().includes(s)) ||
+              formatDate(deal.time).toLowerCase().includes(s)
+            )
+          ) {
+            return false;
+          }
+        }
+        return true;
+      }
       if (filterType === "closed") {
-        return (
-          deal.entryType === "DEAL_ENTRY_OUT" &&
-          deal.type !== "DEAL_TYPE_BALANCE"
-        );
+        if (
+          !(
+            deal.entryType === "DEAL_ENTRY_OUT" &&
+            deal.type !== "DEAL_TYPE_BALANCE"
+          )
+        ) {
+          return false;
+        }
+        if (search) {
+          const s = search.toLowerCase();
+          if (
+            !(
+              deal.symbol?.toLowerCase().includes(s) ||
+              (deal.price && deal.price.toString().includes(s)) ||
+              (deal.volume && deal.volume.toString().includes(s)) ||
+              (deal.profit && deal.profit.toString().includes(s)) ||
+              (deal.commission && deal.commission.toString().includes(s)) ||
+              (deal.swap && deal.swap.toString().includes(s)) ||
+              formatDate(deal.time).toLowerCase().includes(s)
+            )
+          ) {
+            return false;
+          }
+        }
+        return true;
       }
       if (filterType === "balance") {
-        return deal.type === "DEAL_TYPE_BALANCE";
+        if (deal.type !== "DEAL_TYPE_BALANCE") return false;
+        if (search) {
+          const s = search.toLowerCase();
+          if (
+            !(
+              deal.symbol?.toLowerCase().includes(s) ||
+              (deal.price && deal.price.toString().includes(s)) ||
+              (deal.volume && deal.volume.toString().includes(s)) ||
+              (deal.profit && deal.profit.toString().includes(s)) ||
+              (deal.commission && deal.commission.toString().includes(s)) ||
+              (deal.swap && deal.swap.toString().includes(s)) ||
+              formatDate(deal.time).toLowerCase().includes(s)
+            )
+          ) {
+            return false;
+          }
+        }
+        return true;
       }
       if (filterType === "profit") {
-        return deal.profit > 0 && deal.entryType === "DEAL_ENTRY_OUT";
+        if (!(deal.profit > 0 && deal.entryType === "DEAL_ENTRY_OUT"))
+          return false;
+        if (search) {
+          const s = search.toLowerCase();
+          if (
+            !(
+              deal.symbol?.toLowerCase().includes(s) ||
+              (deal.price && deal.price.toString().includes(s)) ||
+              (deal.volume && deal.volume.toString().includes(s)) ||
+              (deal.profit && deal.profit.toString().includes(s)) ||
+              (deal.commission && deal.commission.toString().includes(s)) ||
+              (deal.swap && deal.swap.toString().includes(s)) ||
+              formatDate(deal.time).toLowerCase().includes(s)
+            )
+          ) {
+            return false;
+          }
+        }
+        return true;
       }
       if (filterType === "loss") {
-        return deal.profit < 0 && deal.entryType === "DEAL_ENTRY_OUT";
+        if (!(deal.profit < 0 && deal.entryType === "DEAL_ENTRY_OUT"))
+          return false;
+        if (search) {
+          const s = search.toLowerCase();
+          if (
+            !(
+              deal.symbol?.toLowerCase().includes(s) ||
+              (deal.price && deal.price.toString().includes(s)) ||
+              (deal.volume && deal.volume.toString().includes(s)) ||
+              (deal.profit && deal.profit.toString().includes(s)) ||
+              (deal.commission && deal.commission.toString().includes(s)) ||
+              (deal.swap && deal.swap.toString().includes(s)) ||
+              formatDate(deal.time).toLowerCase().includes(s)
+            )
+          ) {
+            return false;
+          }
+        }
+        return true;
       }
       return true;
     });
-  }, [deals, filterType]);
+  }, [deals, filterType, dateFrom, dateTo, search]);
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredDeals.length / ITEMS_PER_PAGE);
@@ -103,22 +244,20 @@ const TradingLog = () => {
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const paginatedDeals = filteredDeals.slice(startIndex, endIndex);
 
-  // Reset to page 1 when filter or year changes
+  // Reset to page 1 when filter or date changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterType, selectedYear]);
+  }, [filterType, selectedDate]);
 
-  // Generate year options
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 11 }, (_, i) => currentYear - i);
+  // Remove year options, use date picker
 
   // Calculate statistics
   const closedTrades = deals.filter(
-    (d) => d.entryType === "DEAL_ENTRY_OUT" && d.type !== "DEAL_TYPE_BALANCE"
+    (d) => d.entryType === "DEAL_ENTRY_OUT" && d.type !== "DEAL_TYPE_BALANCE",
   );
   const totalProfit = closedTrades.reduce(
     (sum, d) => sum + d.profit + d.commission + d.swap,
-    0
+    0,
   );
   const wonTrades = closedTrades.filter((d) => d.profit > 0);
   const lostTrades = closedTrades.filter((d) => d.profit < 0);
@@ -230,7 +369,7 @@ const TradingLog = () => {
         <Card>
           <CardHeader>
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-              <div>
+              <div className="w-full">
                 <CardTitle>Trade History</CardTitle>
                 <p className="text-sm text-brand-gray mt-1">
                   Showing {startIndex + 1}-
@@ -240,7 +379,75 @@ const TradingLog = () => {
                     ` (${deals.length} total)`}
                 </p>
               </div>
-              <div className="flex gap-3 items-center">
+              <div className="flex gap-3 justify-end items-center flex-wrap w-full">
+                {/* Date range search for profit/loss only using shadcn calendar popover */}
+
+                {/* Date picker for year/month filter */}
+                <div className="flex items-center gap-2">
+                  {/* Start Date Popover */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={
+                          "w-[160px] justify-start text-left font-normal"
+                        }
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4 text-brand-gray" />
+                        {selectedDate?.from
+                          ? format(selectedDate.from, "MMM d, yyyy")
+                          : "Start date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="p-0 w-fit">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate?.from}
+                        month={startMonth || selectedDate?.from || undefined}
+                        onMonthChange={setStartMonth}
+                        onSelect={(date) => {
+                          setSelectedDate((prev) => ({ ...prev, from: date }));
+                          if (date) setStartMonth(date);
+                        }}
+                        captionLayout="dropdown"
+                        fromYear={new Date().getFullYear() - 10}
+                        toYear={new Date().getFullYear()}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {/* End Date Popover */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={
+                          "w-[160px] justify-start text-left font-normal"
+                        }
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4 text-brand-gray" />
+                        {selectedDate?.to
+                          ? format(selectedDate.to, "MMM d, yyyy")
+                          : "End date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="p-0 w-fit">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate?.to}
+                        month={endMonth || selectedDate?.to || undefined}
+                        onMonthChange={setEndMonth}
+                        onSelect={(date) => {
+                          setSelectedDate((prev) => ({ ...prev, to: date }));
+                          if (date) setEndMonth(date);
+                        }}
+                        captionLayout="dropdown"
+                        fromYear={new Date().getFullYear() - 10}
+                        toYear={new Date().getFullYear()}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
                 <div className="flex items-center gap-2">
                   <Filter className="h-4 w-4 text-brand-gray" />
                   <Select value={filterType} onValueChange={setFilterType}>
@@ -253,24 +460,6 @@ const TradingLog = () => {
                       <SelectItem value="balance">Balance Changes</SelectItem>
                       <SelectItem value="profit">Profitable</SelectItem>
                       <SelectItem value="loss">Losses</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-brand-gray" />
-                  <Select
-                    value={selectedYear.toString()}
-                    onValueChange={(value) => setSelectedYear(parseInt(value))}
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {years.map((year) => (
-                        <SelectItem key={year} value={year.toString()}>
-                          {year}
-                        </SelectItem>
-                      ))}
                     </SelectContent>
                   </Select>
                 </div>
