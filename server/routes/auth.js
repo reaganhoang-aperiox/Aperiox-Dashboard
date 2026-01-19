@@ -13,12 +13,28 @@ const router = express.Router();
  */
 router.post("/signup", async (req, res, next) => {
   try {
-    const { username, email, password, name, accountId } = req.body;
+    const {
+      username,
+      email,
+      password,
+      name,
+      accountId,
+      server,
+      accountNumber,
+      investorPassword,
+    } = req.body;
 
-    if (!username || !email || !password || !accountId) {
+    if (
+      !username ||
+      !email ||
+      !password ||
+      !server ||
+      !accountNumber ||
+      !investorPassword
+    ) {
       throw new ApiError(
         400,
-        "Username, email, password, and accountId are required"
+        "Username, email, password, server, account number, and investor password are required",
       );
     }
 
@@ -36,7 +52,10 @@ router.post("/signup", async (req, res, next) => {
       email,
       password,
       name: name || username,
-      accountId,
+      accountId: accountId || null,
+      server,
+      accountNumber,
+      investorPassword,
     });
 
     res.status(201).json({
@@ -49,6 +68,9 @@ router.post("/signup", async (req, res, next) => {
         email: newUser.email,
         name: newUser.name,
         isApproved: newUser.isApproved === 1,
+        server: newUser.server,
+        accountNumber: newUser.accountNumber,
+        investorPassword: newUser.investorPassword,
       },
     });
   } catch (error) {
@@ -79,7 +101,7 @@ router.post("/login", async (req, res, next) => {
     if (user.isApproved === 0) {
       throw new ApiError(
         403,
-        "Your account is pending approval. Please wait for admin approval."
+        "Your account is pending approval. Please wait for admin approval.",
       );
     }
 
@@ -99,7 +121,7 @@ router.post("/login", async (req, res, next) => {
         isAdmin: user.isAdmin === 1,
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" },
     );
 
     res.json({

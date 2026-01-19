@@ -1,5 +1,5 @@
-import { initDatabase } from "./db.js";
+import { initDatabase, ensureAdminUser } from "./db.js";
 
-// Initialize database on import
+// Initialize database and ensure admin user
 initDatabase();
-
+ensureAdminUser();

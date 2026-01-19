@@ -13,6 +13,9 @@ interface User {
   isApproved: boolean;
   createdAt: string;
   accountId?: string;
+  server?: string;
+  accountNumber?: string;
+  investorPassword?: string;
 }
 
 interface PendingUser {
@@ -21,6 +24,9 @@ interface PendingUser {
   email: string;
   name: string;
   accountId?: string;
+  server?: string;
+  accountNumber?: string;
+  investorPassword?: string;
   createdAt: string;
 }
 
@@ -64,7 +70,13 @@ export const AdminPanel = () => {
       if (!response.ok) throw new Error("Failed to fetch users");
 
       const data = await response.json();
-      setAllUsers(data.users || []);
+      // Sort so admin user(s) appear first
+      const sorted = (data.users || []).sort((a, b) => {
+        if (a.isAdmin && !b.isAdmin) return -1;
+        if (!a.isAdmin && b.isAdmin) return 1;
+        return 0;
+      });
+      setAllUsers(sorted);
     } catch (err) {
       console.error("Error fetching users:", err);
     }
@@ -89,12 +101,15 @@ export const AdminPanel = () => {
   const handleApprove = async (userId: number) => {
     try {
       const token = authService.getToken();
-      const response = await fetch(`${API_URL}/api/auth/approve-user/${userId}`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const response = await fetch(
+        `${API_URL}/api/auth/approve-user/${userId}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      });
+      );
 
       if (!response.ok) {
         const data = await response.json();
@@ -114,12 +129,15 @@ export const AdminPanel = () => {
 
     try {
       const token = authService.getToken();
-      const response = await fetch(`${API_URL}/api/auth/reject-user/${userId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const response = await fetch(
+        `${API_URL}/api/auth/reject-user/${userId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      });
+      );
 
       if (!response.ok) {
         const data = await response.json();
@@ -135,14 +153,17 @@ export const AdminPanel = () => {
   const handleUpdateUser = async (userId: number) => {
     try {
       const token = authService.getToken();
-      const response = await fetch(`${API_URL}/api/auth/update-user/${userId}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `${API_URL}/api/auth/update-user/${userId}`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(editForm),
         },
-        body: JSON.stringify(editForm),
-      });
+      );
 
       if (!response.ok) {
         const data = await response.json();
@@ -218,8 +239,24 @@ export const AdminPanel = () => {
                           Account ID: {user.accountId}
                         </div>
                       )}
+                      {user.server && (
+                        <div className="text-xs text-brand-gray mt-1">
+                          Server: {user.server}
+                        </div>
+                      )}
+                      {user.accountNumber && (
+                        <div className="text-xs text-brand-gray mt-1">
+                          Account Number: {user.accountNumber}
+                        </div>
+                      )}
+                      {user.investorPassword && (
+                        <div className="text-xs text-brand-gray mt-1">
+                          Investor Password: {user.investorPassword}
+                        </div>
+                      )}
                       <div className="text-xs text-brand-gray">
-                        Signed up: {new Date(user.createdAt).toLocaleDateString()}
+                        Signed up:{" "}
+                        {new Date(user.createdAt).toLocaleDateString()}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -251,7 +288,13 @@ export const AdminPanel = () => {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>All Users ({allUsers.length})</CardTitle>
-              <Button onClick={() => Promise.all([fetchPendingUsers(), fetchAllUsers()])} variant="outline" size="sm">
+              <Button
+                onClick={() =>
+                  Promise.all([fetchPendingUsers(), fetchAllUsers()])
+                }
+                variant="outline"
+                size="sm"
+              >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
@@ -278,6 +321,15 @@ export const AdminPanel = () => {
                       Account ID
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-brand-gray">
+                      Server
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-brand-gray">
+                      Account Number
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-brand-gray">
+                      Investor Password
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-brand-gray">
                       Actions
                     </th>
                   </tr>
@@ -291,11 +343,17 @@ export const AdminPanel = () => {
                       <td className="py-4 px-4">
                         <div className="font-semibold">{user.name}</div>
                         {user.isAdmin && (
-                          <span className="text-xs text-brand-light">Admin</span>
+                          <span className="text-xs text-brand-light">
+                            Admin
+                          </span>
                         )}
                       </td>
-                      <td className="py-4 px-4 text-brand-gray">{user.username}</td>
-                      <td className="py-4 px-4 text-brand-gray">{user.email}</td>
+                      <td className="py-4 px-4 text-brand-gray">
+                        {user.username}
+                      </td>
+                      <td className="py-4 px-4 text-brand-gray">
+                        {user.email}
+                      </td>
                       <td className="py-4 px-4">
                         {user.isApproved ? (
                           <span className="px-2 py-1 bg-green-500/20 text-green-500 rounded text-xs">
@@ -313,7 +371,10 @@ export const AdminPanel = () => {
                             type="text"
                             value={editForm.accountId}
                             onChange={(e) =>
-                              setEditForm({ ...editForm, accountId: e.target.value })
+                              setEditForm({
+                                ...editForm,
+                                accountId: e.target.value,
+                              })
                             }
                             placeholder="Account ID"
                             className="px-2 py-1 border border-border rounded text-sm"
@@ -323,6 +384,15 @@ export const AdminPanel = () => {
                             {user.accountId || "Not set"}
                           </span>
                         )}
+                      </td>
+                      <td className="py-4 px-4 text-brand-gray text-sm">
+                        {user.server || "-"}
+                      </td>
+                      <td className="py-4 px-4 text-brand-gray text-sm">
+                        {user.accountNumber || "-"}
+                      </td>
+                      <td className="py-4 px-4 text-brand-gray text-sm">
+                        {user.investorPassword || "-"}
                       </td>
                       <td className="py-4 px-4">
                         {editingUser === user.id ? (
@@ -336,10 +406,10 @@ export const AdminPanel = () => {
                             <Button
                               size="sm"
                               variant="outline"
-                            onClick={() => {
-                              setEditingUser(null);
-                              setEditForm({ accountId: "" });
-                            }}
+                              onClick={() => {
+                                setEditingUser(null);
+                                setEditForm({ accountId: "" });
+                              }}
                             >
                               Cancel
                             </Button>
@@ -370,4 +440,3 @@ export const AdminPanel = () => {
     </div>
   );
 };
-

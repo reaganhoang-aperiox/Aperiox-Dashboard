@@ -23,7 +23,9 @@ export const SignupForm = ({
     password: "",
     confirmPassword: "",
     name: "",
-    accountId: "",
+    server: "",
+    accountNumber: "",
+    investorPassword: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -43,8 +45,14 @@ export const SignupForm = ({
       return;
     }
 
-    if (!formData.accountId || formData.accountId.trim() === "") {
-      setError("MetaAPI Account ID is required");
+    if (
+      !formData.server ||
+      !formData.accountNumber ||
+      !formData.investorPassword
+    ) {
+      setError(
+        "Broker server, account number, and investor password are required",
+      );
       return;
     }
 
@@ -62,7 +70,9 @@ export const SignupForm = ({
           email: formData.email,
           password: formData.password,
           name: formData.name || formData.username,
-          accountId: formData.accountId,
+          server: formData.server,
+          accountNumber: formData.accountNumber,
+          investorPassword: formData.investorPassword,
         }),
       });
 
@@ -169,7 +179,10 @@ export const SignupForm = ({
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="confirmPassword" className="text-sm font-medium">
+                <label
+                  htmlFor="confirmPassword"
+                  className="text-sm font-medium"
+                >
                   Confirm Password *
                 </label>
                 <input
@@ -178,7 +191,10 @@ export const SignupForm = ({
                   placeholder="Confirm your password"
                   value={formData.confirmPassword}
                   onChange={(e) =>
-                    setFormData({ ...formData, confirmPassword: e.target.value })
+                    setFormData({
+                      ...formData,
+                      confirmPassword: e.target.value,
+                    })
                   }
                   className="w-full px-4 py-3 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand-light transition-colors"
                   required
@@ -187,25 +203,64 @@ export const SignupForm = ({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="accountId" className="text-sm font-medium">
-                MetaAPI Account ID *
-              </label>
-              <input
-                id="accountId"
-                type="text"
-                placeholder="Enter your MetaAPI Account ID"
-                value={formData.accountId}
-                onChange={(e) =>
-                  setFormData({ ...formData, accountId: e.target.value })
-                }
-                className="w-full px-4 py-3 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand-light transition-colors"
-                required
-                disabled={loading}
-              />
-              <p className="text-xs text-brand-gray">
-                Your MetaAPI Account ID from MetaAPI.cloud dashboard
-              </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <label htmlFor="server" className="text-sm font-medium">
+                  Broker Server Name *
+                </label>
+                <input
+                  id="server"
+                  type="text"
+                  placeholder="e.g. ICMarkets-Live"
+                  value={formData.server}
+                  onChange={(e) =>
+                    setFormData({ ...formData, server: e.target.value })
+                  }
+                  className="w-full px-4 py-3 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand-light transition-colors"
+                  required
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="accountNumber" className="text-sm font-medium">
+                  Account Number *
+                </label>
+                <input
+                  id="accountNumber"
+                  type="text"
+                  placeholder="MT4/MT5 Account Number"
+                  value={formData.accountNumber}
+                  onChange={(e) =>
+                    setFormData({ ...formData, accountNumber: e.target.value })
+                  }
+                  className="w-full px-4 py-3 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand-light transition-colors"
+                  required
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="investorPassword"
+                  className="text-sm font-medium"
+                >
+                  Investor Password *
+                </label>
+                <input
+                  id="investorPassword"
+                  type="password"
+                  placeholder="Investor (read-only) Password"
+                  value={formData.investorPassword}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      investorPassword: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-3 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand-light transition-colors"
+                  required
+                  disabled={loading}
+                />
+              </div>
             </div>
 
             {error && (
@@ -237,4 +292,3 @@ export const SignupForm = ({
     </div>
   );
 };
-

@@ -1,3 +1,5 @@
+import dotenv from "dotenv";
+dotenv.config();
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -7,6 +9,7 @@ import bcrypt from "bcryptjs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Database path
 const DB_PATH = path.join(__dirname, "../data/trading.db");
 const DB_DIR = path.dirname(DB_PATH);
 
@@ -23,7 +26,7 @@ db.pragma("foreign_keys = ON");
 
 // Initialize database schema
 export function initDatabase() {
-  // Create users table
+  // Users table
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +34,10 @@ export function initDatabase() {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       name TEXT NOT NULL,
-      accountId TEXT NOT NULL,
+      accountId TEXT,
+      server TEXT,
+      accountNumber TEXT,
+      investorPassword TEXT,
       isAdmin INTEGER DEFAULT 0,
       isApproved INTEGER DEFAULT 0,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -39,7 +45,7 @@ export function initDatabase() {
     )
   `);
 
-  // Create index for faster lookups
+  // Indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_username ON users(username);
     CREATE INDEX IF NOT EXISTS idx_email ON users(email);
@@ -49,8 +55,10 @@ export function initDatabase() {
   console.log("✅ Database initialized successfully");
 }
 
-// User model functions
-const userModel = {
+// ------------------------
+// User Model
+// ------------------------
+export const userModel = {
   findByUsername: (username) => {
     return db.prepare("SELECT * FROM users WHERE username = ?").get(username);
   },
@@ -70,28 +78,38 @@ const userModel = {
   },
 
   create: (userData) => {
-    const { username, email, password, name, accountId } = userData;
-    const hashedPassword = bcrypt.hashSync(password, 10);
+    const {
+      username,
+      email,
+      password,
+      name,
+      accountId,
+      server,
+      accountNumber,
+      investorPassword,
+      isAdmin = 0,
+      isApproved = 0,
+    } = userData;
 
-    // Check if this is the first user - make them admin
-    const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get();
-    const isFirstUser = userCount.count === 0;
+    const hashedPassword = bcrypt.hashSync(password, 10);
 
     const result = db
       .prepare(
-        `
-        INSERT INTO users (username, email, password, name, accountId, isAdmin, isApproved)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `
+        `INSERT INTO users 
+        (username, email, password, name, accountId, server, accountNumber, investorPassword, isAdmin, isApproved)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         username,
         email,
         hashedPassword,
         name || username,
-        accountId,
-        isFirstUser ? 1 : 0, // First user becomes admin
-        isFirstUser ? 1 : 0 // First user is auto-approved
+        accountId || null,
+        server || null,
+        accountNumber || null,
+        investorPassword || null,
+        isAdmin,
+        isApproved,
       );
 
     return userModel.findById(result.lastInsertRowid);
@@ -114,7 +132,7 @@ const userModel = {
     values.push(id);
 
     db.prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = ?`).run(
-      ...values
+      ...values,
     );
 
     return userModel.findById(id);
@@ -131,7 +149,7 @@ const userModel = {
   getAllPending: () => {
     return db
       .prepare(
-        "SELECT * FROM users WHERE isApproved = 0 ORDER BY createdAt DESC"
+        "SELECT id, username, email, name, accountId, server, accountNumber, investorPassword, isAdmin, isApproved, createdAt FROM users WHERE isApproved = 0 ORDER BY createdAt DESC",
       )
       .all();
   },
@@ -139,7 +157,7 @@ const userModel = {
   getAll: () => {
     return db
       .prepare(
-        "SELECT id, username, email, name, accountId, isAdmin, isApproved, createdAt FROM users ORDER BY createdAt DESC"
+        "SELECT id, username, email, name, accountId, server, accountNumber, investorPassword, isAdmin, isApproved, createdAt FROM users ORDER BY createdAt DESC",
       )
       .all();
   },
@@ -150,4 +168,32 @@ const userModel = {
   },
 };
 
-export { userModel };
+// ------------------------
+// Ensure admin user from environment
+// ------------------------
+export const ensureAdminUser = () => {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  const adminUsername = process.env.ADMIN_USERNAME || "admin";
+  const adminName = process.env.ADMIN_NAME || "Admin";
+
+  if (!adminEmail || !adminPassword) {
+    console.warn(
+      "ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env to create admin user.",
+    );
+    return;
+  }
+
+  const existing = userModel.findByEmail(adminEmail);
+  if (!existing) {
+    userModel.create({
+      username: adminUsername,
+      email: adminEmail,
+      password: adminPassword,
+      name: adminName,
+      isAdmin: 1,
+      isApproved: 1,
+    });
+    console.log("✅ Admin user created from environment variables.");
+  }
+};
