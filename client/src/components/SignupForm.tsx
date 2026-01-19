@@ -92,7 +92,7 @@ export const SignupForm = ({
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-brand-light-alt/40 p-4">
-      <Card className="w-full max-w-2xl bg-card shadow-lg">
+      <Card className="w-full max-w-3xl bg-card shadow-lg">
         <CardHeader className="space-y-2 text-center">
           <div className="flex justify-center mb-4">
             <img src="/images/logo.svg" alt="Logo" className="h-12 w-auto" />
@@ -211,7 +211,7 @@ export const SignupForm = ({
                 <input
                   id="server"
                   type="text"
-                  placeholder="e.g. ICMarkets-Live"
+                  placeholder="e.g. VTMARKETS-LIVE 9"
                   value={formData.server}
                   onChange={(e) =>
                     setFormData({ ...formData, server: e.target.value })
@@ -268,7 +268,10 @@ export const SignupForm = ({
                 <p className="text-sm text-destructive">{error}</p>
               </div>
             )}
-
+            <div className="text-xs font-medium text-brand-gray mb-2">
+              Disclaimer: You can retrieve this in your email inbox after
+              signing up.
+            </div>
             <Button
               type="submit"
               className="w-full bg-brand-light hover:bg-brand-dark text-white font-semibold py-3 rounded-lg transition-colors"
