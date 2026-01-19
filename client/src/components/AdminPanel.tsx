@@ -71,11 +71,13 @@ export const AdminPanel = () => {
 
       const data = await response.json();
       // Sort so admin user(s) appear first
-      const sorted = (data.users || []).sort((a, b) => {
-        if (a.isAdmin && !b.isAdmin) return -1;
-        if (!a.isAdmin && b.isAdmin) return 1;
-        return 0;
-      });
+      const sorted = (data.users || []).sort(
+        (a: { isAdmin: boolean }, b: { isAdmin: boolean }) => {
+          if (a.isAdmin && !b.isAdmin) return -1;
+          if (!a.isAdmin && b.isAdmin) return 1;
+          return 0;
+        },
+      );
       setAllUsers(sorted);
     } catch (err) {
       console.error("Error fetching users:", err);
