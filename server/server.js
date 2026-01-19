@@ -3,12 +3,30 @@ import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
 import { rateLimit } from "express-rate-limit";
+import fetch from "node-fetch";
 import authRoutes from "./routes/auth.js";
 import accountRoutes from "./routes/account.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import "./database/init.js"; // Initialize database
 
 dotenv.config();
+
+// Ping API_URL every 10 minutes to prevent Render free server from idling
+const API_URL =
+  process.env.API_URL || `http://localhost:${process.env.PORT || 3001}/health`;
+setInterval(
+  () => {
+    fetch(API_URL)
+      .then((res) => res.text())
+      .then(() => {
+        console.log(`[CRON] Pinged ${API_URL} to keep server alive.`);
+      })
+      .catch((err) => {
+        console.error(`[CRON] Failed to ping ${API_URL}:`, err.message);
+      });
+  },
+  10 * 60 * 1000,
+); // 10 minutes
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,7 +37,7 @@ app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:5173",
     credentials: true,
-  })
+  }),
 );
 
 // Rate limiting
