@@ -8,18 +8,15 @@
  *   node utils/manageUsers.js list
  *   node utils/manageUsers.js remove --username USERNAME
  *   node utils/manageUsers.js update --username USERNAME --field VALUE
+ *   node utils/manageUsers.js approve --username USERNAME
+ *   node utils/manageUsers.js make-admin --username USERNAME
  */
 
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import "dotenv/config";
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { execSync } from "child_process";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const AUTH_FILE = path.join(__dirname, "../routes/auth.js");
+const prisma = new PrismaClient();
 
 // Parse command line arguments
 function parseArgs() {
@@ -38,159 +35,100 @@ function parseArgs() {
   return { command, options };
 }
 
-// Read current users from auth.js
-function readUsers() {
-  try {
-    const content = fs.readFileSync(AUTH_FILE, "utf8");
-    const match = content.match(/const investors = \[([\s\S]*?)\];/);
-
-    if (!match) {
-      throw new Error("Could not find investors array in auth.js");
-    }
-
-    // Extract user objects (simple parsing - works for current format)
-    const usersText = match[1];
-    const users = [];
-    const userRegex = /\{[\s\S]*?\}/g;
-    let userMatch;
-
-    while ((userMatch = userRegex.exec(usersText)) !== null) {
-      const userText = userMatch[0];
-      const idMatch = userText.match(/id:\s*"([^"]+)"/);
-      const usernameMatch = userText.match(/username:\s*"([^"]+)"/);
-      const emailMatch = userText.match(/email:\s*"([^"]+)"/);
-      const passwordMatch = userText.match(/password:\s*"([^"]+)"/);
-      const accountIdMatch = userText.match(/accountId:\s*"([^"]+)"/);
-      const nameMatch = userText.match(/name:\s*"([^"]+)"/);
-
-      if (usernameMatch) {
-        users.push({
-          id: idMatch ? idMatch[1] : String(users.length + 1),
-          username: usernameMatch[1],
-          email: emailMatch ? emailMatch[1] : "",
-          password: passwordMatch ? passwordMatch[1] : "",
-          accountId: accountIdMatch ? accountIdMatch[1] : "",
-          name: nameMatch ? nameMatch[1] : usernameMatch[1],
-        });
-      }
-    }
-
-    return users;
-  } catch (error) {
-    console.error("Error reading users:", error.message);
-    return [];
-  }
-}
-
-// Write users back to auth.js
-function writeUsers(users) {
-  try {
-    let content = fs.readFileSync(AUTH_FILE, "utf8");
-
-    // Generate users array string
-    const usersArray = users
-      .map(
-        (user) => `  {
-    id: "${user.id}",
-    username: "${user.username}",
-    email: "${user.email}",
-    password: "${user.password}", // bcrypt hash
-    accountId: "${user.accountId}",
-    name: "${user.name}",
-  }`
-      )
-      .join(",\n");
-
-    // Replace the investors array
-    content = content.replace(
-      /const investors = \[[\s\S]*?\];/,
-      `const investors = [\n${usersArray}\n];`
-    );
-
-    fs.writeFileSync(AUTH_FILE, content, "utf8");
-    return true;
-  } catch (error) {
-    console.error("Error writing users:", error.message);
-    return false;
-  }
-}
-
 // Add a new user
 async function addUser(options) {
-  const { username, email, password, accountId, name } = options;
+  const { username, email, password, accountId, name, admin, approved } =
+    options;
 
-  if (!username || !email || !password || !accountId) {
-    console.error(
-      "❌ Error: username, email, password, and accountId are required"
-    );
+  if (!username || !email || !password) {
+    console.error("❌ Error: username, email, and password are required");
     console.log("\nUsage:");
     console.log(
-      '  node utils/manageUsers.js add --username USERNAME --email EMAIL --password PASSWORD --accountId ACCOUNT_ID --name "NAME"'
+      '  node utils/manageUsers.js add --username USERNAME --email EMAIL --password PASSWORD --accountId ACCOUNT_ID --name "NAME" --admin true --approved true',
     );
     process.exit(1);
   }
 
-  const users = readUsers();
+  try {
+    // Check if user exists
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [{ username }, { email }],
+      },
+    });
 
-  // Check if user exists
-  if (users.find((u) => u.username === username || u.email === email)) {
-    console.error(
-      `❌ Error: User with username "${username}" or email "${email}" already exists`
-    );
-    process.exit(1);
-  }
+    if (existingUser) {
+      console.error(
+        `❌ Error: User with username "${username}" or email "${email}" already exists`,
+      );
+      process.exit(1);
+    }
 
-  // Hash password
-  const hashedPassword = await bcrypt.hash(password, 10);
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Add new user
-  const newUser = {
-    id: String(users.length + 1),
-    username,
-    email,
-    password: hashedPassword,
-    accountId,
-    name: name || username,
-  };
+    // Add new user
+    const newUser = await prisma.user.create({
+      data: {
+        username,
+        email,
+        password: hashedPassword,
+        name: name || username,
+        accountId: accountId || null,
+        isAdmin: admin === "true" || admin === "1",
+        isApproved: approved === "true" || approved === "1" || true, // Default to approved
+      },
+    });
 
-  users.push(newUser);
-
-  if (writeUsers(users)) {
     console.log("✅ User added successfully!");
     console.log(`\nUser Details:`);
+    console.log(`  ID: ${newUser.id}`);
     console.log(`  Username: ${username}`);
     console.log(`  Email: ${email}`);
     console.log(`  Name: ${newUser.name}`);
-    console.log(`  Account ID: ${accountId}`);
+    console.log(`  Account ID: ${newUser.accountId || "Not set"}`);
+    console.log(`  Admin: ${newUser.isAdmin ? "Yes" : "No"}`);
+    console.log(`  Approved: ${newUser.isApproved ? "Yes" : "No"}`);
     console.log(`\n⚠️  Share these credentials securely with the client:`);
     console.log(`  Username: ${username}`);
     console.log(`  Password: ${password}`);
-  } else {
-    console.error("❌ Failed to add user");
+  } catch (error) {
+    console.error("❌ Failed to add user:", error.message);
     process.exit(1);
   }
 }
 
 // List all users
-function listUsers() {
-  const users = readUsers();
+async function listUsers() {
+  try {
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
+    });
 
-  if (users.length === 0) {
-    console.log("No users found.");
-    return;
+    if (users.length === 0) {
+      console.log("No users found.");
+      return;
+    }
+
+    console.log(`\n📋 Found ${users.length} user(s):\n`);
+    users.forEach((user, index) => {
+      console.log(
+        `${index + 1}. ${user.name} (${user.username}) ${user.isAdmin ? "👑 ADMIN" : ""}`,
+      );
+      console.log(`   Email: ${user.email}`);
+      console.log(`   Account ID: ${user.accountId || "Not set"}`);
+      console.log(`   Approved: ${user.isApproved ? "✅ Yes" : "⏳ Pending"}`);
+      console.log(`   Created: ${user.createdAt.toLocaleDateString()}`);
+      console.log(`   ID: ${user.id}\n`);
+    });
+  } catch (error) {
+    console.error("❌ Failed to list users:", error.message);
+    process.exit(1);
   }
-
-  console.log(`\n📋 Found ${users.length} user(s):\n`);
-  users.forEach((user, index) => {
-    console.log(`${index + 1}. ${user.name} (${user.username})`);
-    console.log(`   Email: ${user.email}`);
-    console.log(`   Account ID: ${user.accountId}`);
-    console.log(`   ID: ${user.id}\n`);
-  });
 }
 
 // Remove a user
-function removeUser(options) {
+async function removeUser(options) {
   const { username } = options;
 
   if (!username) {
@@ -200,18 +138,23 @@ function removeUser(options) {
     process.exit(1);
   }
 
-  const users = readUsers();
-  const filteredUsers = users.filter((u) => u.username !== username);
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username },
+    });
 
-  if (users.length === filteredUsers.length) {
-    console.error(`❌ Error: User "${username}" not found`);
-    process.exit(1);
-  }
+    if (!user) {
+      console.error(`❌ Error: User "${username}" not found`);
+      process.exit(1);
+    }
 
-  if (writeUsers(filteredUsers)) {
+    await prisma.user.delete({
+      where: { username },
+    });
+
     console.log(`✅ User "${username}" removed successfully!`);
-  } else {
-    console.error("❌ Failed to remove user");
+  } catch (error) {
+    console.error("❌ Failed to remove user:", error.message);
     process.exit(1);
   }
 }
@@ -224,45 +167,108 @@ async function updateUser(options) {
     console.error("❌ Error: username is required");
     console.log("\nUsage:");
     console.log(
-      "  node utils/manageUsers.js update --username USERNAME --email NEW_EMAIL"
+      "  node utils/manageUsers.js update --username USERNAME --email NEW_EMAIL",
     );
     console.log(
-      "  node utils/manageUsers.js update --username USERNAME --password NEW_PASSWORD"
+      "  node utils/manageUsers.js update --username USERNAME --password NEW_PASSWORD",
     );
     console.log(
-      "  node utils/manageUsers.js update --username USERNAME --accountId NEW_ACCOUNT_ID"
+      "  node utils/manageUsers.js update --username USERNAME --accountId NEW_ACCOUNT_ID",
     );
     console.log(
-      '  node utils/manageUsers.js update --username USERNAME --name "NEW NAME"'
+      '  node utils/manageUsers.js update --username USERNAME --name "NEW NAME"',
     );
     process.exit(1);
   }
 
-  const users = readUsers();
-  const userIndex = users.findIndex((u) => u.username === username);
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username },
+    });
 
-  if (userIndex === -1) {
-    console.error(`❌ Error: User "${username}" not found`);
-    process.exit(1);
-  }
+    if (!user) {
+      console.error(`❌ Error: User "${username}" not found`);
+      process.exit(1);
+    }
 
-  const user = users[userIndex];
+    const updateData = {};
 
-  // Update fields
-  if (updates.email) user.email = updates.email;
-  if (updates.accountId) user.accountId = updates.accountId;
-  if (updates.name) user.name = updates.name;
+    if (updates.email) updateData.email = updates.email;
+    if (updates.accountId) updateData.accountId = updates.accountId;
+    if (updates.name) updateData.name = updates.name;
+    if (updates.server) updateData.server = updates.server;
+    if (updates.accountNumber) updateData.accountNumber = updates.accountNumber;
+    if (updates.investorPassword)
+      updateData.investorPassword = updates.investorPassword;
 
-  if (updates.password) {
-    user.password = await bcrypt.hash(updates.password, 10);
-  }
+    if (updates.password) {
+      updateData.password = await bcrypt.hash(updates.password, 10);
+    }
 
-  users[userIndex] = user;
+    const updatedUser = await prisma.user.update({
+      where: { username },
+      data: updateData,
+    });
 
-  if (writeUsers(users)) {
     console.log(`✅ User "${username}" updated successfully!`);
-  } else {
-    console.error("❌ Failed to update user");
+    console.log(`\nUpdated fields:`);
+    Object.keys(updateData).forEach((key) => {
+      if (key !== "password") {
+        console.log(`  ${key}: ${updatedUser[key]}`);
+      } else {
+        console.log(`  password: [updated]`);
+      }
+    });
+  } catch (error) {
+    console.error("❌ Failed to update user:", error.message);
+    process.exit(1);
+  }
+}
+
+// Approve a user
+async function approveUser(options) {
+  const { username } = options;
+
+  if (!username) {
+    console.error("❌ Error: username is required");
+    console.log("\nUsage:");
+    console.log("  node utils/manageUsers.js approve --username USERNAME");
+    process.exit(1);
+  }
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { username },
+      data: { isApproved: true },
+    });
+
+    console.log(`✅ User "${username}" approved successfully!`);
+  } catch (error) {
+    console.error("❌ Failed to approve user:", error.message);
+    process.exit(1);
+  }
+}
+
+// Make user admin
+async function makeAdmin(options) {
+  const { username } = options;
+
+  if (!username) {
+    console.error("❌ Error: username is required");
+    console.log("\nUsage:");
+    console.log("  node utils/manageUsers.js make-admin --username USERNAME");
+    process.exit(1);
+  }
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { username },
+      data: { isAdmin: true, isApproved: true },
+    });
+
+    console.log(`✅ User "${username}" is now an admin!`);
+  } catch (error) {
+    console.error("❌ Failed to make user admin:", error.message);
     process.exit(1);
   }
 }
@@ -271,43 +277,66 @@ async function updateUser(options) {
 async function main() {
   const { command, options } = parseArgs();
 
-  switch (command) {
-    case "add":
-      await addUser(options);
-      break;
-    case "list":
-      listUsers();
-      break;
-    case "remove":
-      removeUser(options);
-      break;
-    case "update":
-      await updateUser(options);
-      break;
-    default:
-      console.log("User Management Utility\n");
-      console.log("Usage:");
-      console.log(
-        '  node utils/manageUsers.js add --username USERNAME --email EMAIL --password PASSWORD --accountId ACCOUNT_ID --name "NAME"'
-      );
-      console.log("  node utils/manageUsers.js list");
-      console.log("  node utils/manageUsers.js remove --username USERNAME");
-      console.log(
-        "  node utils/manageUsers.js update --username USERNAME --field VALUE"
-      );
-      console.log("\nExamples:");
-      console.log(
-        '  node utils/manageUsers.js add --username client1 --email client1@example.com --password SecurePass123 --accountId abc-123-def --name "John Doe"'
-      );
-      console.log(
-        "  node utils/manageUsers.js update --username client1 --password NewPassword123"
-      );
-      console.log("  node utils/manageUsers.js remove --username client1");
-      process.exit(1);
+  try {
+    await prisma.$connect();
+
+    switch (command) {
+      case "add":
+        await addUser(options);
+        break;
+      case "list":
+        await listUsers();
+        break;
+      case "remove":
+        await removeUser(options);
+        break;
+      case "update":
+        await updateUser(options);
+        break;
+      case "approve":
+        await approveUser(options);
+        break;
+      case "make-admin":
+        await makeAdmin(options);
+        break;
+      default:
+        console.log("User Management Utility\n");
+        console.log("Usage:");
+        console.log(
+          '  node utils/manageUsers.js add --username USERNAME --email EMAIL --password PASSWORD --accountId ACCOUNT_ID --name "NAME" --admin true --approved true',
+        );
+        console.log("  node utils/manageUsers.js list");
+        console.log("  node utils/manageUsers.js remove --username USERNAME");
+        console.log(
+          "  node utils/manageUsers.js update --username USERNAME --field VALUE",
+        );
+        console.log("  node utils/manageUsers.js approve --username USERNAME");
+        console.log(
+          "  node utils/manageUsers.js make-admin --username USERNAME",
+        );
+        console.log("\nExamples:");
+        console.log(
+          '  node utils/manageUsers.js add --username client1 --email client1@example.com --password SecurePass123 --accountId abc-123-def --name "John Doe"',
+        );
+        console.log(
+          "  node utils/manageUsers.js update --username client1 --password NewPassword123",
+        );
+        console.log(
+          "  node utils/manageUsers.js approve --username client1",
+        );
+        console.log(
+          "  node utils/manageUsers.js make-admin --username client1",
+        );
+        console.log("  node utils/manageUsers.js remove --username client1");
+        process.exit(1);
+    }
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 main().catch((error) => {
   console.error("❌ Error:", error.message);
+  prisma.$disconnect();
   process.exit(1);
 });

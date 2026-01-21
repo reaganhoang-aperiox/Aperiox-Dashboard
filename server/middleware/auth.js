@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import { ApiError } from "./errorHandler.js";
 import { userModel } from "../database/db.js";
 
-export const authenticateToken = (req, res, next) => {
+export const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
 
@@ -14,13 +14,13 @@ export const authenticateToken = (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Get fresh user data from database
-    const user = userModel.findById(decoded.id);
+    const user = await userModel.findById(decoded.id);
 
     if (!user) {
       return next(new ApiError(404, "User not found"));
     }
 
-    if (user.isApproved === 0) {
+    if (!user.isApproved) {
       return next(new ApiError(403, "Account pending approval"));
     }
 
@@ -29,7 +29,7 @@ export const authenticateToken = (req, res, next) => {
       id: user.id,
       username: user.username,
       accountId: user.accountId,
-      isAdmin: user.isAdmin === 1,
+      isAdmin: user.isAdmin,
     };
 
     next();

@@ -39,15 +39,15 @@ router.post("/signup", async (req, res, next) => {
     }
 
     // Check if user exists
-    const existingUser =
-      userModel.findByUsername(username) || userModel.findByEmail(email);
+    const existingByUsername = await userModel.findByUsername(username);
+    const existingByEmail = await userModel.findByEmail(email);
 
-    if (existingUser) {
+    if (existingByUsername || existingByEmail) {
       throw new ApiError(409, "User already exists");
     }
 
     // Create new user (first user becomes admin and auto-approved)
-    const newUser = userModel.create({
+    const newUser = await userModel.create({
       username,
       email,
       password,
@@ -67,7 +67,7 @@ router.post("/signup", async (req, res, next) => {
         username: newUser.username,
         email: newUser.email,
         name: newUser.name,
-        isApproved: newUser.isApproved === 1,
+        isApproved: newUser.isApproved,
         server: newUser.server,
         accountNumber: newUser.accountNumber,
         investorPassword: newUser.investorPassword,
@@ -91,14 +91,14 @@ router.post("/login", async (req, res, next) => {
     }
 
     // Find user by username or email
-    const user = userModel.findByUsernameOrEmail(username);
+    const user = await userModel.findByUsernameOrEmail(username);
 
     if (!user) {
       throw new ApiError(401, "Invalid credentials");
     }
 
     // Check if user is approved
-    if (user.isApproved === 0) {
+    if (!user.isApproved) {
       throw new ApiError(
         403,
         "Your account is pending approval. Please wait for admin approval.",
@@ -118,7 +118,7 @@ router.post("/login", async (req, res, next) => {
         id: user.id,
         username: user.username,
         accountId: user.accountId,
-        isAdmin: user.isAdmin === 1,
+        isAdmin: user.isAdmin,
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || "7d" },
@@ -133,8 +133,8 @@ router.post("/login", async (req, res, next) => {
         email: user.email,
         name: user.name,
         accountId: user.accountId,
-        isAdmin: user.isAdmin === 1,
-        isApproved: user.isApproved === 1,
+        isAdmin: user.isAdmin,
+        isApproved: user.isApproved,
       },
     });
   } catch (error) {
@@ -148,7 +148,7 @@ router.post("/login", async (req, res, next) => {
  */
 router.get("/me", authenticateToken, async (req, res, next) => {
   try {
-    const user = userModel.findById(req.user.id);
+    const user = await userModel.findById(req.user.id);
 
     if (!user) {
       throw new ApiError(404, "User not found");
@@ -162,8 +162,8 @@ router.get("/me", authenticateToken, async (req, res, next) => {
         email: user.email,
         name: user.name,
         accountId: user.accountId,
-        isAdmin: user.isAdmin === 1,
-        isApproved: user.isApproved === 1,
+        isAdmin: user.isAdmin,
+        isApproved: user.isApproved,
       },
     });
   } catch (error) {
@@ -178,12 +178,12 @@ router.get("/me", authenticateToken, async (req, res, next) => {
 router.get("/pending-users", authenticateToken, async (req, res, next) => {
   try {
     // Check if user is admin
-    const user = userModel.findById(req.user.id);
-    if (!user || user.isAdmin !== 1) {
+    const user = await userModel.findById(req.user.id);
+    if (!user || !user.isAdmin) {
       throw new ApiError(403, "Admin access required");
     }
 
-    const pendingUsers = userModel.getAllPending();
+    const pendingUsers = await userModel.getAllPending();
 
     res.json({
       success: true,
@@ -208,12 +208,12 @@ router.get("/pending-users", authenticateToken, async (req, res, next) => {
 router.get("/users", authenticateToken, async (req, res, next) => {
   try {
     // Check if user is admin
-    const user = userModel.findById(req.user.id);
-    if (!user || user.isAdmin !== 1) {
+    const user = await userModel.findById(req.user.id);
+    if (!user || !user.isAdmin) {
       throw new ApiError(403, "Admin access required");
     }
 
-    const users = userModel.getAll();
+    const users = await userModel.getAll();
 
     res.json({
       success: true,
@@ -231,13 +231,13 @@ router.get("/users", authenticateToken, async (req, res, next) => {
 router.post("/approve-user/:id", authenticateToken, async (req, res, next) => {
   try {
     // Check if user is admin
-    const user = userModel.findById(req.user.id);
-    if (!user || user.isAdmin !== 1) {
+    const user = await userModel.findById(req.user.id);
+    if (!user || !user.isAdmin) {
       throw new ApiError(403, "Admin access required");
     }
 
     const userId = parseInt(req.params.id);
-    const updatedUser = userModel.approve(userId);
+    const updatedUser = await userModel.approve(userId);
 
     if (!updatedUser) {
       throw new ApiError(404, "User not found");
@@ -251,7 +251,7 @@ router.post("/approve-user/:id", authenticateToken, async (req, res, next) => {
         username: updatedUser.username,
         email: updatedUser.email,
         name: updatedUser.name,
-        isApproved: updatedUser.isApproved === 1,
+        isApproved: updatedUser.isApproved,
       },
     });
   } catch (error) {
@@ -266,20 +266,20 @@ router.post("/approve-user/:id", authenticateToken, async (req, res, next) => {
 router.delete("/reject-user/:id", authenticateToken, async (req, res, next) => {
   try {
     // Check if user is admin
-    const user = userModel.findById(req.user.id);
-    if (!user || user.isAdmin !== 1) {
+    const user = await userModel.findById(req.user.id);
+    if (!user || !user.isAdmin) {
       throw new ApiError(403, "Admin access required");
     }
 
     const userId = parseInt(req.params.id);
 
     // Don't allow deleting admin users
-    const targetUser = userModel.findById(userId);
-    if (targetUser && targetUser.isAdmin === 1) {
+    const targetUser = await userModel.findById(userId);
+    if (targetUser && targetUser.isAdmin) {
       throw new ApiError(400, "Cannot delete admin user");
     }
 
-    userModel.reject(userId);
+    await userModel.reject(userId);
 
     res.json({
       success: true,
@@ -297,8 +297,8 @@ router.delete("/reject-user/:id", authenticateToken, async (req, res, next) => {
 router.put("/update-user/:id", authenticateToken, async (req, res, next) => {
   try {
     // Check if user is admin
-    const user = userModel.findById(req.user.id);
-    if (!user || user.isAdmin !== 1) {
+    const user = await userModel.findById(req.user.id);
+    if (!user || !user.isAdmin) {
       throw new ApiError(403, "Admin access required");
     }
 
@@ -309,7 +309,7 @@ router.put("/update-user/:id", authenticateToken, async (req, res, next) => {
       throw new ApiError(400, "Account ID is required");
     }
 
-    const updatedUser = userModel.update(userId, { accountId });
+    const updatedUser = await userModel.update(userId, { accountId });
 
     if (!updatedUser) {
       throw new ApiError(404, "User not found");

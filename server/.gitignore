@@ -8,3 +8,7 @@ build
 data/
 *.db
 *.db-journal
+
+# Prisma
+prisma/migrations
+generated/
